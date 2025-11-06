@@ -1,0 +1,20 @@
+{
+  "name": "stacktrace",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.68.0",
+    "better-sqlite3": "^12.4.1",
+    "chokidar": "^4.0.3",
+    "chrome-paths": "^1.0.1",
+    "commander": "^14.0.2",
+    "simple-git": "^3.30.0"
+  }
+}
