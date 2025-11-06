@@ -1,10 +1,14 @@
 const DatabaseManager = require('../database/DatabaseManager');
+const FileMonitor = require('../monitors/FileMonitor');
+const GitMonitor = require('../monitors/GitMonitor');
 const path = require('path');
 const fs = require('fs');
 
 class SessionManager {
   constructor() {
     this.dbManager = new DatabaseManager();
+    this.fileMonitor = new FileMonitor();
+    this.gitMonitor = new GitMonitor();
     this.currentSession = null;
     this.initialized = false;
   }
@@ -36,13 +40,37 @@ class SessionManager {
       const sessionId = await this.dbManager.createSession(resolvedPath);
       this.currentSession = await this.dbManager.getSessionById(sessionId);
 
-      return {
-        success: true,
-        sessionId: sessionId,
-        projectPath: resolvedPath,
-        startTime: this.currentSession.start_time,
-        message: `Started tracking session for project: ${resolvedPath}`
-      };
+      // Start monitoring services
+      try {
+        console.log('Starting file monitoring...');
+        const fileMonitorStarted = await this.fileMonitor.startWatching(resolvedPath, sessionId);
+        
+        console.log('Starting git monitoring...');
+        const gitMonitorStarted = await this.gitMonitor.startMonitoring(resolvedPath, sessionId);
+
+        const monitoringStatus = [];
+        if (fileMonitorStarted) monitoringStatus.push('file monitoring');
+        if (gitMonitorStarted) monitoringStatus.push('git monitoring');
+
+        return {
+          success: true,
+          sessionId: sessionId,
+          projectPath: resolvedPath,
+          startTime: this.currentSession.start_time,
+          message: `Started tracking session for project: ${resolvedPath}`,
+          monitoring: monitoringStatus.length > 0 ? monitoringStatus : ['basic session tracking']
+        };
+      } catch (monitorError) {
+        console.warn('Warning: Some monitoring services failed to start:', monitorError.message);
+        return {
+          success: true,
+          sessionId: sessionId,
+          projectPath: resolvedPath,
+          startTime: this.currentSession.start_time,
+          message: `Started tracking session for project: ${resolvedPath}`,
+          warning: 'Some monitoring services may not be active'
+        };
+      }
     } catch (error) {
       throw new Error(`Failed to start session: ${error.message}`);
     }
@@ -58,6 +86,17 @@ class SessionManager {
           success: false,
           message: 'No active session to stop'
         };
+      }
+
+      // Stop monitoring services first
+      try {
+        console.log('Stopping file monitoring...');
+        await this.fileMonitor.stopWatching();
+        
+        console.log('Stopping git monitoring...');
+        await this.gitMonitor.stopMonitoring();
+      } catch (monitorError) {
+        console.warn('Warning: Error stopping monitoring services:', monitorError.message);
       }
 
       const stopped = await this.dbManager.endSession(activeSession.id);
@@ -99,6 +138,10 @@ class SessionManager {
       // Get session statistics
       const stats = await this.dbManager.getSessionStats(activeSession.id);
 
+      // Get monitoring status
+      const fileMonitorStatus = this.fileMonitor.getMonitoringStatus();
+      const gitMonitorStatus = this.gitMonitor.getMonitoringStatus();
+
       return {
         active: true,
         sessionId: activeSession.id,
@@ -109,6 +152,16 @@ class SessionManager {
         stats: {
           snapshots: stats.snapshots,
           gitEvents: stats.gitEvents
+        },
+        monitoring: {
+          fileMonitoring: {
+            active: fileMonitorStatus.isWatching,
+            activeFiles: fileMonitorStatus.activeFileCount || 0
+          },
+          gitMonitoring: {
+            active: gitMonitorStatus.isMonitoring,
+            currentBranch: gitMonitorStatus.lastBranch || 'unknown'
+          }
         }
       };
     } catch (error) {
@@ -145,6 +198,18 @@ class SessionManager {
   }
 
   async cleanup() {
+    try {
+      // Stop monitoring services
+      if (this.fileMonitor) {
+        await this.fileMonitor.stopWatching();
+      }
+      if (this.gitMonitor) {
+        await this.gitMonitor.stopMonitoring();
+      }
+    } catch (error) {
+      console.warn('Warning: Error during cleanup:', error.message);
+    }
+
     if (this.dbManager) {
       this.dbManager.close();
     }
