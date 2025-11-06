@@ -15,6 +15,7 @@
     "chokidar": "^4.0.3",
     "chrome-paths": "^1.0.1",
     "commander": "^14.0.2",
+    "jest": "^30.2.0",
     "simple-git": "^3.30.0"
   }
 }
