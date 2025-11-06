@@ -197,6 +197,42 @@ class DatabaseManager {
     }
   }
 
+  async insertSnapshot(sessionId, snapshotData) {
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO snapshots (session_id, timestamp, file_path, file_size, last_modified, change_type)
+        VALUES (?, datetime('now'), ?, ?, ?, ?)
+      `);
+      
+      const result = stmt.run(
+        sessionId,
+        snapshotData.filePath,
+        snapshotData.fileSize || null,
+        snapshotData.lastModified || null,
+        snapshotData.changeType || null
+      );
+      
+      return result.lastInsertRowid;
+    } catch (error) {
+      throw new Error(`Failed to insert snapshot: ${error.message}`);
+    }
+  }
+
+  async getSnapshots(sessionId, limit = 100) {
+    try {
+      const stmt = this.db.prepare(`
+        SELECT * FROM snapshots 
+        WHERE session_id = ? 
+        ORDER BY timestamp DESC 
+        LIMIT ?
+      `);
+      
+      return stmt.all(sessionId, limit);
+    } catch (error) {
+      throw new Error(`Failed to get snapshots: ${error.message}`);
+    }
+  }
+
   close() {
     if (this.db) {
       this.db.close();
