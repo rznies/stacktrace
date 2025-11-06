@@ -156,6 +156,47 @@ class DatabaseManager {
     }
   }
 
+  async insertGitEvent(sessionId, eventData) {
+    try {
+      const stmt = this.db.prepare(`
+        INSERT INTO git_events (session_id, timestamp, event_type, branch_name, commit_hash, commit_message, files_changed)
+        VALUES (?, datetime('now'), ?, ?, ?, ?, ?)
+      `);
+      
+      const result = stmt.run(
+        sessionId,
+        eventData.eventType,
+        eventData.branchName || null,
+        eventData.commitHash || null,
+        eventData.commitMessage || null,
+        eventData.filesChanged ? JSON.stringify(eventData.filesChanged) : null
+      );
+      
+      return result.lastInsertRowid;
+    } catch (error) {
+      throw new Error(`Failed to insert git event: ${error.message}`);
+    }
+  }
+
+  async getGitEvents(sessionId, limit = 50) {
+    try {
+      const stmt = this.db.prepare(`
+        SELECT * FROM git_events 
+        WHERE session_id = ? 
+        ORDER BY timestamp DESC 
+        LIMIT ?
+      `);
+      
+      const events = stmt.all(sessionId, limit);
+      return events.map(event => ({
+        ...event,
+        filesChanged: event.files_changed ? JSON.parse(event.files_changed) : null
+      }));
+    } catch (error) {
+      throw new Error(`Failed to get git events: ${error.message}`);
+    }
+  }
+
   close() {
     if (this.db) {
       this.db.close();
